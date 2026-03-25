@@ -1,0 +1,24 @@
+# Git
+.git
+.gitignore
+
+# OS
+.DS_Store
+
+# Ansible
+ansible/
+
+# Node modules
+app/src/node_modules/
+
+# Environment files
+app/src/.env
+app/src/.env.*
+
+# Logs
+app/src/npm-debug.log*
+app/src/yarn-debug.log*
+app/src/yarn-error.log*
+
+# Docker
+docker/

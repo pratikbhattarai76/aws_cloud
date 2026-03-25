@@ -6,23 +6,29 @@
       <%- include("partials/nav") %>
       <%- include("partials/flash", { flash }) %>
 
-      <section class="panel library-panel">
+      <section class="panel library-panel" data-reveal>
         <div class="library-topbar">
           <div>
             <p class="eyebrow">Library</p>
             <h1>Your uploaded files</h1>
-            <p class="lede-small">Browse, search, open, or download files without exposing storage internals.</p>
+            <p class="lede-small">Search by name, then open or download the file you need.</p>
           </div>
 
           <form class="search-form" action="/files" method="GET">
-            <input
-              aria-label="Search files"
-              type="search"
-              name="q"
-              value="<%= search %>"
-              placeholder="Search by file name"
-            />
+            <label class="search-shell">
+              <span class="search-icon" aria-hidden="true">Search</span>
+              <input
+                aria-label="Search files"
+                type="search"
+                name="q"
+                value="<%= search %>"
+                placeholder="Search by file name"
+              />
+            </label>
             <button class="button button-muted" type="submit">Search</button>
+            <% if (search) { %>
+              <a class="text-link" href="/files">Clear</a>
+            <% } %>
           </form>
         </div>
 
@@ -31,7 +37,7 @@
         <% } %>
 
         <% if (!storageError && !files.length && search) { %>
-          <section class="empty-state">
+          <section class="empty-state" data-reveal>
             <h2>No matching files</h2>
             <p>Try a different search term or clear the filter.</p>
             <a class="text-link" href="/files">Clear search</a>
@@ -39,7 +45,7 @@
         <% } %>
 
         <% if (!storageError && !files.length && !search) { %>
-          <section class="empty-state">
+          <section class="empty-state" data-reveal>
             <h2>No files yet</h2>
             <p>Upload your first file and it will appear here.</p>
             <a class="button" href="/">Upload a file</a>
@@ -49,18 +55,19 @@
         <% if (files.length) { %>
           <div class="library-meta">
             <span><%= files.length %> <%= files.length === 1 ? "file" : "files" %> shown</span>
+            <span><%= search ? `Filter: ${search}` : "All files" %></span>
             <% if (hasMore) { %>
-              <span>Showing the latest <%= files.length %> items.</span>
+              <span>Showing the latest items first</span>
             <% } %>
           </div>
 
           <section class="file-list">
             <% files.forEach((file) => { %>
-              <article class="file-card">
+              <article class="file-card" data-reveal>
                 <div class="file-kind"><%= file.kind %></div>
                 <div class="file-main">
-                  <h2><%= file.displayName %></h2>
-                  <p>
+                  <h2 title="<%= file.displayName %>"><%= file.displayName %></h2>
+                  <p class="file-meta">
                     <span><%= formatDate(file.uploadedAt) %></span>
                     <span>•</span>
                     <span><%= formatBytes(file.size) %></span>
