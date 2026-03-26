@@ -1,8 +1,6 @@
 services:
   malaideu:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: ghcr.io/pratikbhattarai76/malaideu:latest
     container_name: malaideu
     restart: unless-stopped
     env_file:
