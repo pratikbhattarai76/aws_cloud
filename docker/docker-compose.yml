@@ -4,6 +4,6 @@ services:
     container_name: malaideu
     restart: unless-stopped
     env_file:
-      - ../app/src/.env
+      - ./app/src/.env
     ports:
       - "3000:3000"
