@@ -1,0 +1,37 @@
+- name: Deploy file upload app
+  hosts: aws
+  become: true
+
+  vars:
+    app_name: aws_file_upload_MalaiDeu
+    app_path: /home/ubuntu/{{ app_name }}
+
+  tasks:
+    - name: Ensure app directory exists
+      file:
+        path: "{{ app_path }}"
+        state: directory
+        owner: ubuntu
+        group: ubuntu
+        mode: "0755"
+
+    - name: Copy app directory
+      copy:
+        src: ../app/
+        dest: "{{ app_path }}/app/"
+        owner: ubuntu
+        group: ubuntu
+        mode: preserve
+
+    - name: Copy docker directory
+      copy:
+        src: ../docker/
+        dest: "{{ app_path }}/docker/"
+        owner: ubuntu
+        group: ubuntu
+        mode: preserve
+
+    - name: Run Docker Compose
+      command: docker compose -f docker/docker-compose.yml up -d --build
+      args:
+        chdir: "{{ app_path }}"
