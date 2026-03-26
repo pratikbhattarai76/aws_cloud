@@ -78,7 +78,7 @@ jobs:
       - name: Deploy to EC2
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} '
-            cd /home/ubuntu/docker/aws_file_upload_MalaiDeu &&
+            cd /home/ubuntu/docker/aws-file-upload &&
             docker compose -f docker/docker-compose.yml pull &&
             docker compose -f docker/docker-compose.yml up -d
           '
