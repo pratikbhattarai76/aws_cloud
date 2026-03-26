@@ -24,7 +24,6 @@
         group: ubuntu
         mode: "0755"
 
-    # ✅ Copy ONLY docker-compose.yml
     - name: Copy docker-compose.yml
       copy:
         src: ../docker/docker-compose.yml
@@ -33,7 +32,6 @@
         group: ubuntu
         mode: "0644"
 
-    # ✅ Copy ONLY .env
     - name: Copy .env file
       copy:
         src: ../app/src/.env
