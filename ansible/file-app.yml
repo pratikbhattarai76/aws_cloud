@@ -1,9 +1,9 @@
-- name: Deploy file upload app
+- name: Prepare deployment folder for file upload app
   hosts: aws
   become: true
 
   vars:
-    app_name: aws_file_upload_MalaiDeu
+    app_name: aws-file-upload
     base_path: /home/ubuntu/docker
     app_path: "{{ base_path }}/{{ app_name }}"
 
@@ -24,23 +24,20 @@
         group: ubuntu
         mode: "0755"
 
-    - name: Copy app code directory
+    # ✅ Copy ONLY docker-compose.yml
+    - name: Copy docker-compose.yml
       copy:
-        src: ../app/
-        dest: "{{ app_path }}/app/"
+        src: ../docker/docker-compose.yml
+        dest: "{{ app_path }}/docker-compose.yml"
         owner: ubuntu
         group: ubuntu
-        mode: preserve
+        mode: "0644"
 
-    - name: Copy the app docker directory
+    # ✅ Copy ONLY .env
+    - name: Copy .env file
       copy:
-        src: ../docker/
-        dest: "{{ app_path }}/docker/"
+        src: ../app/src/.env
+        dest: "{{ app_path }}/app/.env"
         owner: ubuntu
         group: ubuntu
-        mode: preserve
-
-    - name: Run Docker Compose
-      command: docker compose -f docker/docker-compose.yml up -d --build
-      args:
-        chdir: "{{ app_path }}"
+        mode: "0600"
