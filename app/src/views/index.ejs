@@ -1,71 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
-  <%- include("partials/head", { pageTitle }) %>
-  <body>
-    <main class="page-shell">
-      <%- include("partials/nav") %>
-      <%- include("partials/flash", { flash }) %>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><%= pageTitle %></title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>AWS File Upload Portal</h1>
+    <p>Upload files to Amazon S3 through your EC2-hosted app.</p>
 
-      <section class="hero-grid">
-        <article class="hero-copy panel panel-hero" data-reveal>
-          <p class="eyebrow">Simple file upload</p>
-          <h1>Upload files with a clean, quiet flow.</h1>
-          <p class="lede"><%= appName %> keeps the process simple: choose a file, upload it, and open it again later.</p>
+    <% if (flash && flash.success) { %>
+      <div class="message success"><%= flash.success %></div>
+    <% } %>
 
-          <div class="hero-actions">
-            <a class="button" href="#upload-card">Choose a file</a>
-            <a class="button button-muted" href="/files">Open library</a>
-          </div>
+    <% if (flash && flash.error) { %>
+      <div class="message error"><%= flash.error %></div>
+    <% } %>
 
-          <div class="hero-notes">
-            <span class="note-pill">Single file upload</span>
-            <span class="note-pill">Up to <%= maxFileSize %></span>
-            <span class="note-pill">Open or download later</span>
-          </div>
-        </article>
+    <form action="/upload" method="POST" enctype="multipart/form-data" class="card">
+      <label for="file">Choose file</label>
+      <input type="file" name="file" id="file" required />
+      <button type="submit">Upload</button>
+    </form>
 
-        <section id="upload-card" class="panel upload-panel" data-reveal>
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Upload</p>
-              <h2>Choose one file</h2>
-            </div>
-            <span class="hint-pill">Max <%= maxFileSize %></span>
-          </div>
-
-          <form
-            class="upload-form"
-            action="/upload"
-            method="POST"
-            enctype="multipart/form-data"
-            data-upload-form
-          >
-            <label class="dropzone" for="file-input" data-dropzone>
-              <input id="file-input" type="file" name="file" required data-file-input />
-              <span class="dropzone-icon">+</span>
-              <strong>Choose a file</strong>
-              <span class="dropzone-copy">Drag and drop works too, but a simple file picker works just as well.</span>
-
-              <div class="dropzone-meta">
-                <small class="file-chip" data-file-label>No file selected</small>
-              </div>
-            </label>
-
-            <section class="upload-summary" aria-live="polite">
-              <article class="upload-summary-card">
-                <p class="upload-summary-label">Selected file</p>
-                <strong data-selected-name>No file selected</strong>
-                <p data-selected-meta>Once you pick a file, its size and type will appear here.</p>
-              </article>
-            </section>
-
-            <div class="form-row">
-              <button class="button" type="submit" data-submit-button>Upload file</button>
-              <a class="text-link" href="/files">Browse uploaded files</a>
-            </div>
-          </form>
-        </section>
-      </section>
-    </main>
-  </body>
+    <div class="links">
+      <a href="/files">View uploaded files</a>
+    </div>
+  </main>
+</body>
 </html>

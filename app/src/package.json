@@ -1,22 +1,17 @@
 {
-  "name": "malaideu",
+  "name": "aws-file-upload-portal",
   "version": "1.0.0",
-  "description": "MalaiDeu file drop and retrieval app.",
-  "private": true,
+  "description": "Simple file upload portal using Node.js, Express, and Amazon S3",
   "main": "server.js",
+  "type": "commonjs",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "check": "node -e \"require('./app')\""
-  },
-  "engines": {
-    "node": ">=20.0.0"
+    "start": "node server.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.1016.0",
-    "dotenv": "17.3.1",
-    "ejs": "5.0.1",
-    "express": "5.2.1",
-    "multer": "2.1.1"
+    "@aws-sdk/client-s3": "^3.1017.0",
+    "dotenv": "^16.4.7",
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "multer": "^2.0.0"
   }
 }
