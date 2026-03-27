@@ -53,8 +53,14 @@ const requireEnv = (name, value) => {
   return v;
 };
 
+const toAssetVersion = (value) => {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized || String(Date.now());
+};
+
 const env = Object.freeze({
   appName: "MalaiDeu",
+  assetVersion: toAssetVersion(process.env.ASSET_VERSION),
   port: toPort(process.env.PORT),
   storage: Object.freeze({
     region: requireEnv("AWS_REGION", process.env.AWS_REGION),

@@ -23,6 +23,13 @@ const s3 = new S3Client({ region: env.storage.region });
 
 const prefix = env.storage.prefix;
 const basePrefix = `${prefix}/`;
+const FOLDER_PATH_CACHE_TTL_MS = 30 * 1000;
+const folderPathCache = {
+  value: null,
+  expiresAt: 0,
+  pending: null,
+  generation: 0,
+};
 
 const toFileSummary = (object) => {
   const displayName = parseDisplayNameFromKey(object.Key);
@@ -47,70 +54,50 @@ const toDirectFolder = (currentFolder, name) => {
   };
 };
 
+const invalidateFolderPathCache = () => {
+  folderPathCache.value = null;
+  folderPathCache.expiresAt = 0;
+  folderPathCache.pending = null;
+  folderPathCache.generation += 1;
+};
+
 const listEntries = async (search, folder = "") => {
+  const currentFolder = sanitizeFolderPath(folder);
+  const currentPrefix = currentFolder ? `${basePrefix}${currentFolder}/` : basePrefix;
   const response = await s3.send(
     new ListObjectsV2Command({
       Bucket: env.storage.bucketName,
-      Prefix: basePrefix,
+      Prefix: currentPrefix,
+      Delimiter: "/",
       MaxKeys: env.storage.maxListCount,
     })
   );
-
-  const currentFolder = sanitizeFolderPath(folder);
-  const currentPrefix = currentFolder ? `${basePrefix}${currentFolder}/` : basePrefix;
   const searchNeedle = normalizeSearch(search);
-  const folderMap = new Map();
-  const files = [];
+  const folders = (response.CommonPrefixes || [])
+    .map((entry) => String(entry.Prefix || ""))
+    .map((entryPrefix) => entryPrefix.slice(currentPrefix.length).replace(/\/$/, ""))
+    .map((folderName) => sanitizeFolderPath(folderName))
+    .filter(Boolean)
+    .filter((folderName) => !searchNeedle || normalizeSearch(folderName).includes(searchNeedle))
+    .map((folderName) => toDirectFolder(currentFolder, folderName))
+    .sort((left, right) => left.name.localeCompare(right.name));
 
-  (response.Contents || []).forEach((object) => {
-    if (!object.Key || !object.Key.startsWith(currentPrefix)) {
-      return;
-    }
-
-    const relativePath = object.Key.slice(currentPrefix.length);
-
-    if (!relativePath) {
-      return;
-    }
-
-    const parts = relativePath.split("/").filter(Boolean);
-
-    if (!parts.length) {
-      return;
-    }
-
-    if (parts.length > 1 || object.Key.endsWith("/")) {
-      const folderName = parts[0];
-
-      if (searchNeedle && !normalizeSearch(folderName).includes(searchNeedle)) {
-        return;
-      }
-
-      if (!folderMap.has(folderName)) {
-        folderMap.set(folderName, toDirectFolder(currentFolder, folderName));
-      }
-
-      return;
-    }
-
-    const file = toFileSummary(object);
-
-    if (!searchNeedle || normalizeSearch(file.displayName).includes(searchNeedle)) {
-      files.push(file);
-    }
-  });
+  const files = (response.Contents || [])
+    .filter((object) => object.Key && object.Key !== currentPrefix && !object.Key.endsWith("/"))
+    .map((object) => toFileSummary(object))
+    .filter((file) => !searchNeedle || normalizeSearch(file.displayName).includes(searchNeedle));
 
   files.sort((left, right) => {
-      const leftTime = left.uploadedAt ? new Date(left.uploadedAt).getTime() : 0;
-      const rightTime = right.uploadedAt ? new Date(right.uploadedAt).getTime() : 0;
+    const leftTime = left.uploadedAt ? new Date(left.uploadedAt).getTime() : 0;
+    const rightTime = right.uploadedAt ? new Date(right.uploadedAt).getTime() : 0;
 
-      return rightTime - leftTime;
-    });
+    return rightTime - leftTime;
+  });
 
   return {
     currentFolder,
     files,
-    folders: [...folderMap.values()].sort((left, right) => left.name.localeCompare(right.name)),
+    folders,
     hasMore: Boolean(response.IsTruncated),
     parentFolder: getParentFolderPath(currentFolder),
   };
@@ -128,38 +115,72 @@ const toArray = (value) => {
   return [];
 };
 
-const listFolderPaths = async () => {
-  const response = await s3.send(
-    new ListObjectsV2Command({
-      Bucket: env.storage.bucketName,
-      Prefix: basePrefix,
-      MaxKeys: env.storage.maxListCount,
-    })
-  );
-
+const collectFolderPaths = async () => {
   const folders = new Set();
+  let continuationToken;
 
-  (response.Contents || []).forEach((object) => {
-    if (!object.Key || !object.Key.startsWith(basePrefix)) {
-      return;
-    }
+  do {
+    const response = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: env.storage.bucketName,
+        Prefix: basePrefix,
+        MaxKeys: 1000,
+        ContinuationToken: continuationToken,
+      })
+    );
 
-    const folderPath = getFolderPathFromKey(object.Key, prefix);
+    (response.Contents || []).forEach((object) => {
+      if (!object.Key || !object.Key.startsWith(basePrefix)) {
+        return;
+      }
 
-    if (!folderPath) {
-      return;
-    }
+      const folderPath = getFolderPathFromKey(object.Key, prefix);
 
-    const parts = folderPath.split("/").filter(Boolean);
-    let currentPath = "";
+      if (!folderPath) {
+        return;
+      }
 
-    parts.forEach((part) => {
-      currentPath = currentPath ? `${currentPath}/${part}` : part;
-      folders.add(currentPath);
+      const parts = folderPath.split("/").filter(Boolean);
+      let currentPath = "";
+
+      parts.forEach((part) => {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        folders.add(currentPath);
+      });
     });
-  });
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
 
   return [...folders].sort((left, right) => left.localeCompare(right));
+};
+
+const listFolderPaths = async () => {
+  if (folderPathCache.value && folderPathCache.expiresAt > Date.now()) {
+    return folderPathCache.value;
+  }
+
+  if (folderPathCache.pending) {
+    return folderPathCache.pending;
+  }
+
+  const cacheGeneration = folderPathCache.generation;
+  folderPathCache.pending = collectFolderPaths()
+    .then((folders) => {
+      if (folderPathCache.generation === cacheGeneration) {
+        folderPathCache.value = folders;
+        folderPathCache.expiresAt = Date.now() + FOLDER_PATH_CACHE_TTL_MS;
+      }
+
+      return folders;
+    })
+    .finally(() => {
+      if (folderPathCache.generation === cacheGeneration) {
+        folderPathCache.pending = null;
+      }
+    });
+
+  return folderPathCache.pending;
 };
 
 const uploadFiles = async (files, options = {}) => {
@@ -167,7 +188,7 @@ const uploadFiles = async (files, options = {}) => {
   const relativePaths = toArray(options.relativePaths);
   const folderPath = sanitizeFolderPath(options.folderPath);
 
-  return Promise.all(
+  const uploadedFiles = await Promise.all(
     files.map(async (file, index) => {
       const preferredName =
         typeof displayNames[index] === "string" && displayNames[index].trim()
@@ -193,6 +214,9 @@ const uploadFiles = async (files, options = {}) => {
       };
     })
   );
+
+  invalidateFolderPathCache();
+  return uploadedFiles;
 };
 
 const createFolders = async (folderNames, parentFolder = "") => {
@@ -229,6 +253,8 @@ const createFolders = async (folderNames, parentFolder = "") => {
       );
     })
   );
+
+  invalidateFolderPathCache();
 
   return uniqueNames.map((name) => {
     const folderPath = [sanitizeFolderPath(parentFolder), name].filter(Boolean).join("/");

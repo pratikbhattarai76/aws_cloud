@@ -18,6 +18,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 app.use((req, res, next) => {
   res.locals.appName = env.appName;
+  res.locals.assetVersion = env.assetVersion;
   res.locals.currentPath = req.path;
   res.locals.maxFileCount = env.upload.maxFileCount;
   res.locals.maxFileSize = formatBytes(env.upload.maxFileSizeBytes);
