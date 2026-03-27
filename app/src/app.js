@@ -19,6 +19,7 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use((req, res, next) => {
   res.locals.appName = env.appName;
   res.locals.currentPath = req.path;
+  res.locals.maxFileCount = env.upload.maxFileCount;
   res.locals.maxFileSize = formatBytes(env.upload.maxFileSizeBytes);
   res.locals.formatBytes = formatBytes;
   res.locals.formatDate = formatDate;
@@ -38,6 +39,10 @@ app.use((req, res) => {
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
     return redirectWithMessage(res, "/", "error", `Files can be up to ${formatBytes(env.upload.maxFileSizeBytes)}.`);
+  }
+
+  if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_COUNT") {
+    return redirectWithMessage(res, "/", "error", `Upload up to ${env.upload.maxFileCount} files at a time.`);
   }
 
   console.error("Unhandled error:", error);

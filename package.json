@@ -1,0 +1,9 @@
+{
+  "name": "malaideu",
+  "private": true,
+  "description": "Root npm entrypoint for the MalaiDeu file upload app",
+  "scripts": {
+    "install": "npm --prefix app/src install",
+    "start": "npm --prefix app/src start"
+  }
+}

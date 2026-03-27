@@ -1,62 +1,208 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><%= pageTitle %></title>
-  <link rel="stylesheet" href="/style.css" />
-</head>
-<body>
-  <main class="container">
-    <h1>Uploaded Files</h1>
-    <div class="links">
-      <a href="/">Back to upload</a>
-    </div>
+  <%- include("partials/head", { pageTitle }) %>
+  <body>
+    <main class="page-shell">
+      <%- include("partials/nav") %>
 
-    <% if (flash && flash.success) { %>
-      <div class="message success"><%= flash.success %></div>
-    <% } %>
+      <% const totalSize = files.reduce((sum, file) => sum + file.size, 0); %>
+      <% const uploadHref = currentFolder ? `/?folder=${encodeURIComponent(currentFolder)}` : "/"; %>
 
-    <% if (flash && flash.error) { %>
-      <div class="message error"><%= flash.error %></div>
-    <% } %>
+      <section class="page-header" data-reveal>
+        <div>
+          <p class="eyebrow">File Library</p>
+          <h1><%= currentFolder ? currentFolder.split("/").slice(-1)[0] : "Library" %></h1>
+          <p class="lead"><%= currentFolder ? `Current folder: ${currentFolder}` : "Browse folders and uploaded files." %></p>
+        </div>
 
-    <% if (storageError) { %>
-      <div class="message error"><%= storageError %></div>
-    <% } %>
+        <div class="page-actions">
+          <p class="page-actions-label">Search and actions</p>
 
-    <% if (!files.length) { %>
-      <div class="card">
-        <p>No files uploaded yet.</p>
-      </div>
-    <% } else { %>
-      <div class="card">
-        <table>
-          <thead>
-            <tr>
-              <th>File</th>
-              <th>Size</th>
-              <th>Uploaded</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% files.forEach(file => { %>
-              <tr>
-                <td><%= file.displayName %></td>
-                <td><%= formatBytes(file.size) %></td>
-                <td><%= formatDate(file.uploadedAt) %></td>
-                <td>
-                  <a href="/files/<%= encodeURIComponent(file.id) %>/open">Open</a>
-                  |
-                  <a href="/files/<%= encodeURIComponent(file.id) %>/download">Download</a>
-                </td>
-              </tr>
+          <form class="search-form" action="/files" method="GET" role="search">
+            <label class="sr-only" for="q">Search files</label>
+            <% if (currentFolder) { %>
+              <input type="hidden" name="folder" value="<%= currentFolder %>" />
+            <% } %>
+            <input id="q" name="q" type="search" value="<%= search %>" placeholder="Search filenames" />
+            <% if (search) { %>
+              <a class="button button-ghost" href="<%= currentFolder ? `/files?folder=${encodeURIComponent(currentFolder)}` : '/files' %>">Clear</a>
+            <% } %>
+            <button class="button button-primary" type="submit">Search</button>
+          </form>
+
+          <div class="page-actions-row">
+            <button
+              class="button button-primary action-toggle"
+              type="button"
+              data-action-toggle
+              aria-expanded="false"
+              aria-controls="quick-actions-panel"
+            >+ Add</button>
+          </div>
+        </div>
+      </section>
+
+      <%- include("partials/flash", { flash }) %>
+
+      <section class="panel folder-toolbar" data-reveal>
+        <div class="folder-toolbar-head">
+          <div class="folder-breadcrumbs">
+            <a class="button button-ghost" href="/files">Root</a>
+            <% if (parentFolder) { %>
+              <a class="button button-ghost" href="/files?folder=<%= encodeURIComponent(parentFolder) %>">Back</a>
+            <% } %>
+          </div>
+
+          <div class="folder-toolbar-actions">
+            <a class="button button-secondary" href="<%= uploadHref %>">Upload here</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel quick-actions-panel" id="quick-actions-panel" data-actions-panel hidden>
+        <div class="quick-actions-grid">
+          <div class="quick-action-card">
+            <p class="eyebrow">Create Folder</p>
+            <h2>Make a folder here</h2>
+            <p class="supporting-text">Add one folder per line. Use `/` for nested folders like `2026/invoices/march`.</p>
+
+            <form class="folder-form" action="/folders" method="POST">
+              <input type="hidden" name="parentFolder" value="<%= currentFolder %>" />
+              <label class="sr-only" for="folderNames">Folder names</label>
+              <textarea
+                id="folderNames"
+                name="folderNames"
+                class="text-input folder-textarea"
+                required
+              ></textarea>
+              <button class="button button-primary" type="submit">Create folder</button>
+            </form>
+          </div>
+
+          <div class="quick-action-card">
+            <p class="eyebrow">Upload Files</p>
+            <h2>Add files in this folder</h2>
+            <p class="supporting-text">Open the uploader with this folder already selected.</p>
+            <a class="button button-secondary" href="<%= uploadHref %>">Upload into this folder</a>
+          </div>
+        </div>
+      </section>
+
+      <% if (storageError) { %>
+        <section class="panel callout error-callout" data-reveal>
+          <p class="eyebrow">Storage Notice</p>
+          <h2>File library is temporarily unavailable</h2>
+          <p class="supporting-text"><%= storageError %></p>
+        </section>
+      <% } %>
+
+      <section class="summary-grid">
+        <article class="panel summary-card" data-reveal>
+          <p class="eyebrow">Folders</p>
+          <strong><%= folders.length %></strong>
+          <p class="supporting-text">Folders visible in this location.</p>
+        </article>
+
+        <article class="panel summary-card" data-reveal>
+          <p class="eyebrow">Files</p>
+          <strong><%= files.length %></strong>
+          <p class="supporting-text">
+            <%= search ? "Matching files in the current search." : "Files visible in this folder." %>
+          </p>
+        </article>
+
+        <article class="panel summary-card" data-reveal>
+          <p class="eyebrow">Storage</p>
+          <strong><%= formatBytes(totalSize) %></strong>
+          <p class="supporting-text">Combined size of the files shown on this page.</p>
+        </article>
+      </section>
+
+      <% if (!folders.length && !files.length) { %>
+        <section class="panel empty-state" data-reveal>
+          <p class="eyebrow">Nothing here yet</p>
+          <h1><%= search ? "No files match that search." : "This folder is empty." %></h1>
+          <p>
+            <%= search ? `Try another filename or clear the filter.` : "Create a folder or upload files here." %>
+          </p>
+          <div class="empty-actions">
+            <% if (search) { %>
+              <a class="button button-secondary" href="<%= currentFolder ? `/files?folder=${encodeURIComponent(currentFolder)}` : '/files' %>">Clear search</a>
+            <% } %>
+            <a class="button button-primary" href="<%= uploadHref %>">Upload files</a>
+          </div>
+        </section>
+      <% } %>
+
+      <% if (folders.length) { %>
+        <section class="panel file-library" data-reveal>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Folders</p>
+              <h2><%= search ? "Matching folders" : "Folders" %></h2>
+            </div>
+          </div>
+
+          <div class="file-list" role="list">
+            <% folders.forEach(folder => { %>
+              <article class="file-row" role="listitem">
+                <div class="file-row-main">
+                  <span class="file-kind" aria-label="Folder">DIR</span>
+
+                  <div class="file-copy">
+                    <h2 class="file-name"><%= folder.name %></h2>
+                  </div>
+                </div>
+
+                <div class="file-actions">
+                  <a class="button button-secondary" href="/files?folder=<%= encodeURIComponent(folder.path) %>">Open folder</a>
+                </div>
+              </article>
             <% }) %>
-          </tbody>
-        </table>
-      </div>
-    <% } %>
-  </main>
-</body>
+          </div>
+        </section>
+      <% } %>
+
+      <% if (files.length) { %>
+        <section class="panel file-library" data-reveal>
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Files</p>
+              <h2><%= search ? `Results for "${search}"` : "Files" %></h2>
+            </div>
+            <div class="section-actions">
+              <a class="button button-secondary" href="<%= uploadHref %>">Upload here</a>
+            </div>
+          </div>
+
+          <div class="file-list" role="list">
+            <% files.forEach(file => { %>
+              <article class="file-row" role="listitem">
+                <div class="file-row-main">
+                  <span class="file-kind" aria-label="File type"><%= file.kind %></span>
+
+                  <div class="file-copy">
+                    <h2 class="file-name"><%= file.displayName %></h2>
+                    <p class="file-meta">
+                      <span><%= formatBytes(file.size) %></span>
+                      <span><%= formatDate(file.uploadedAt) %></span>
+                    </p>
+                  </div>
+                </div>
+
+                <div class="file-actions">
+                  <a class="button button-secondary" href="/files/<%= encodeURIComponent(file.id) %>/open">Open</a>
+                  <a class="button button-ghost" href="/files/<%= encodeURIComponent(file.id) %>/download">Download</a>
+                </div>
+              </article>
+            <% }) %>
+          </div>
+
+          <% if (hasMore) { %>
+            <p class="library-note">Only the first storage batch is shown right now.</p>
+          <% } %>
+        </section>
+      <% } %>
+    </main>
+  </body>
 </html>

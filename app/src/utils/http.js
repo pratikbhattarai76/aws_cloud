@@ -6,12 +6,20 @@ const getFlash = (req) => ({
   error: typeof req.query.error === "string" ? req.query.error : "",
 });
 
-const redirectWithMessage = (res, pathname, type, message) => {
+const redirectWithMessage = (res, pathname, type, message, extraParams = {}) => {
   const params = new URLSearchParams();
 
   if (type && message) {
     params.set(type, message);
   }
+
+  Object.entries(extraParams).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    params.set(key, String(value));
+  });
 
   const query = params.toString();
   return res.redirect(query ? `${pathname}?${query}` : pathname);

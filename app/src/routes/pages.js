@@ -4,7 +4,7 @@ const { pipeline } = require("stream/promises");
 const env = require("../config/env");
 const upload = require("../middleware/upload");
 const storage = require("../services/storage-service");
-const { buildContentDisposition } = require("../utils/file-utils");
+const { buildContentDisposition, sanitizeFolderPath } = require("../utils/file-utils");
 const { asyncHandler, getFlash, redirectWithMessage } = require("../utils/http");
 
 const router = express.Router();
@@ -16,6 +16,10 @@ const toStorageMessage = (error, fallback) => {
 
   if (error.code === "INVALID_FILE_ID" || error.name === "NoSuchKey") {
     return "That file link is no longer valid.";
+  }
+
+  if (error.code === "INVALID_FOLDER_NAME") {
+    return "Enter a valid folder name.";
   }
 
   if (error.name === "CredentialsProviderError") {
@@ -33,27 +37,102 @@ const toStorageMessage = (error, fallback) => {
   return fallback;
 };
 
-router.get("/", (req, res) => {
-  res.render("index", {
-    pageTitle: "Simple file drop",
-    flash: getFlash(req),
-  });
-});
+router.get(
+  "/",
+  asyncHandler(async (req, res) => {
+    const currentFolder = sanitizeFolderPath(req.query.folder);
+    let folderOptions = [];
+
+    try {
+      folderOptions = await storage.listFolderPaths();
+    } catch (error) {
+      console.error("List folders for upload error:", error);
+    }
+
+    if (currentFolder && !folderOptions.includes(currentFolder)) {
+      folderOptions.unshift(currentFolder);
+    }
+
+    res.render("index", {
+      pageTitle: "Simple file drop",
+      currentFolder,
+      flash: getFlash(req),
+      folderOptions,
+    });
+  })
+);
 
 router.post(
   "/upload",
-  upload.single("file"),
+  upload.array("files", env.upload.maxFileCount),
   asyncHandler(async (req, res) => {
-    if (!req.file) {
-      return redirectWithMessage(res, "/", "error", "Choose a file before uploading.");
+    const folderPath = sanitizeFolderPath(req.body.folder);
+    const displayNames = Array.isArray(req.body.displayNames)
+      ? req.body.displayNames
+      : typeof req.body.displayNames === "string"
+        ? [req.body.displayNames]
+        : [];
+    const relativePaths = Array.isArray(req.body.relativePaths)
+      ? req.body.relativePaths
+      : typeof req.body.relativePaths === "string"
+        ? [req.body.relativePaths]
+        : [];
+
+    if (!req.files || !req.files.length) {
+      return redirectWithMessage(res, "/", "error", "Choose at least one file before uploading.", {
+        folder: folderPath,
+      });
     }
 
     try {
-      const savedFile = await storage.uploadFile(req.file);
-      return redirectWithMessage(res, "/files", "success", `${savedFile.displayName} is ready.`);
+      const savedFiles = await storage.uploadFiles(req.files, { displayNames, relativePaths, folderPath });
+      const successMessage =
+        savedFiles.length === 1 ? `${savedFiles[0].displayName} is ready.` : `${savedFiles.length} files are ready.`;
+
+      return redirectWithMessage(res, "/files", "success", successMessage, {
+        folder: folderPath,
+      });
     } catch (error) {
       console.error("Upload error:", error);
-      return redirectWithMessage(res, "/", "error", toStorageMessage(error, "We could not upload your file."));
+      return redirectWithMessage(res, "/", "error", toStorageMessage(error, "We could not upload your files."), {
+        folder: folderPath,
+      });
+    }
+  })
+);
+
+router.post(
+  "/folders",
+  asyncHandler(async (req, res) => {
+    const parentFolder = sanitizeFolderPath(req.body.parentFolder);
+    const redirectTo = req.body.redirectTo === "upload" ? "/" : "/files";
+    const folderNames = Array.isArray(req.body.folderNames)
+      ? req.body.folderNames
+      : typeof req.body.folderNames === "string"
+        ? [req.body.folderNames]
+        : [];
+
+    if (!folderNames.some((name) => String(name || "").trim())) {
+      return redirectWithMessage(res, redirectTo, "error", "Enter a folder name.", {
+        folder: parentFolder,
+      });
+    }
+
+    try {
+      const folders = await storage.createFolders(folderNames, parentFolder);
+      const successMessage =
+        folders.length === 1 ? `${folders[0].name} folder created.` : `${folders.length} folders created.`;
+      const nextFolder = folders.length === 1 ? folders[0].path : parentFolder;
+
+      return redirectWithMessage(res, redirectTo, "success", successMessage, {
+        folder: nextFolder,
+      });
+    } catch (error) {
+      console.error("Create folder error:", error);
+
+      return redirectWithMessage(res, redirectTo, "error", toStorageMessage(error, "We could not create that folder."), {
+        folder: parentFolder,
+      });
     }
   })
 );
@@ -62,15 +141,19 @@ router.get(
   "/files",
   asyncHandler(async (req, res) => {
     const search = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    const currentFolder = sanitizeFolderPath(req.query.folder);
     const flash = getFlash(req);
 
     try {
-      const library = await storage.listFiles(search);
+      const library = await storage.listEntries(search, currentFolder);
 
       return res.render("files", {
         pageTitle: "File library",
         flash,
         files: library.files,
+        folders: library.folders,
+        currentFolder: library.currentFolder,
+        parentFolder: library.parentFolder,
         search,
         hasMore: library.hasMore,
         storageError: "",
@@ -82,6 +165,9 @@ router.get(
         pageTitle: "File library",
         flash,
         files: [],
+        folders: [],
+        currentFolder,
+        parentFolder: "",
         search,
         hasMore: false,
         storageError: toStorageMessage(error, "We could not load your files right now."),

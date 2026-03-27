@@ -25,12 +25,54 @@ This project demonstrates an end-to-end DevOps workflow, covering:
 
 ## ✨ Features
 
-- Upload files through web interface
+- Upload multiple files through the web interface
+- Upload a folder from your device and keep its folder structure
+- Create folders and nested folders from the website
+- Upload files into a selected folder for better organization
 - Store files securely in AWS S3
-- Retrieve and download uploaded files
+- Browse folders, open files, and download files
+- Rename files before upload
 - Server-side rendering using EJS
 - Containerized deployment using Docker
 - Automated deployment via CI/CD pipeline
+
+---
+
+## 💻 Local Run
+
+From the project root:
+
+```bash
+npm install
+npm start
+```
+
+The app loads environment variables from `app/src/.env`.
+
+Minimum required variables:
+
+- `AWS_REGION`
+- `S3_BUCKET_NAME`
+
+Optional variables:
+
+- `PORT`
+- `S3_PREFIX`
+- `MAX_FILE_SIZE_MB`
+- `MAX_FILE_COUNT`
+- `MAX_LIST_COUNT`
+
+Current upload behavior:
+
+- Up to `10` files per upload by default
+- Each file can be up to `20 MB` by default
+
+You can also run the app directly from `app/src`:
+
+```bash
+cd app/src
+npm start
+```
 
 ---
 
@@ -108,4 +150,3 @@ Restart container
 - Basics of DNS and HTTPS using Cloudflare
 
 ---
-

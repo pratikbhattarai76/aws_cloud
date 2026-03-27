@@ -5,7 +5,7 @@ const env = require("../config/env");
 module.exports = multer({
   storage: multer.memoryStorage(),
   limits: {
-    files: 1,
+    files: env.upload.maxFileCount,
     fileSize: env.upload.maxFileSizeBytes,
   },
 });

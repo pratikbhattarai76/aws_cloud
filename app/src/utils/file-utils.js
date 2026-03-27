@@ -17,15 +17,40 @@ const sanitizeDisplayName = (value) => {
   return `${limitedStem}${limitedExtension}`;
 };
 
-const buildObjectKey = (displayName, prefix) => {
-  const now = new Date();
-  const year = String(now.getUTCFullYear());
-  const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(now.getUTCDate()).padStart(2, "0");
+const sanitizeFolderPath = (value) => {
+  const normalized = String(value || "")
+    .replace(/[\u0000-\u001F\u007F]+/g, "")
+    .replace(/\\/g, "/")
+    .trim();
+
+  if (!normalized) {
+    return "";
+  }
+
+  const segments = normalized
+    .split("/")
+    .map((segment) => segment.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .filter((segment) => segment !== "." && segment !== "..")
+    .map((segment) => segment.slice(0, 80))
+    .filter(Boolean);
+
+  return segments.join("/");
+};
+
+const sanitizeFolderName = (value) => {
+  const segments = sanitizeFolderPath(value).split("/").filter(Boolean);
+  return segments.length ? segments[segments.length - 1] : "";
+};
+
+const buildObjectKey = (displayName, prefix, folderPath = "") => {
   const uniquePart = `${Date.now()}-${crypto.randomUUID()}`;
   const encodedName = encodeURIComponent(displayName);
+  const objectName = `${uniquePart}__${encodedName}`;
+  const safeFolderPath = sanitizeFolderPath(folderPath);
+  const pathSegments = safeFolderPath ? safeFolderPath.split("/") : [];
 
-  return [prefix, year, month, day, uniquePart, encodedName].join("/");
+  return [prefix, ...pathSegments, objectName].join("/");
 };
 
 const parseDisplayNameFromKey = (key) => {
@@ -38,11 +63,45 @@ const parseDisplayNameFromKey = (key) => {
     return "untitled-file";
   }
 
+  const encodedSegment = lastSegment.includes("__") ? lastSegment.split("__").slice(1).join("__") : lastSegment;
+
   try {
-    return sanitizeDisplayName(decodeURIComponent(lastSegment));
+    return sanitizeDisplayName(decodeURIComponent(encodedSegment));
   } catch (error) {
-    return lastSegment.replace(/^\d{10,}-/, "") || "untitled-file";
+    return sanitizeDisplayName(encodedSegment) || "untitled-file";
   }
+};
+
+const getFolderPathFromKey = (key, prefix) => {
+  const keyParts = String(key || "")
+    .split("/")
+    .filter(Boolean);
+  const prefixParts = String(prefix || "")
+    .split("/")
+    .filter(Boolean);
+
+  if (keyParts.length <= prefixParts.length) {
+    return "";
+  }
+
+  const remainingParts = keyParts.slice(prefixParts.length);
+
+  if (String(key || "").endsWith("/")) {
+    return sanitizeFolderPath(remainingParts.join("/"));
+  }
+
+  return sanitizeFolderPath(remainingParts.slice(0, -1).join("/"));
+};
+
+const getParentFolderPath = (folderPath) => {
+  const parts = sanitizeFolderPath(folderPath).split("/").filter(Boolean);
+
+  if (!parts.length) {
+    return "";
+  }
+
+  parts.pop();
+  return parts.join("/");
 };
 
 const encodeFileId = (key) => Buffer.from(String(key), "utf8").toString("base64url");
@@ -135,8 +194,12 @@ module.exports = {
   encodeFileId,
   formatBytes,
   formatDate,
+  getFolderPathFromKey,
   getFileKind,
+  getParentFolderPath,
   normalizeSearch,
   parseDisplayNameFromKey,
   sanitizeDisplayName,
+  sanitizeFolderName,
+  sanitizeFolderPath,
 };

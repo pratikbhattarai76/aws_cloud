@@ -63,6 +63,7 @@ const env = Object.freeze({
     maxListCount: toMaxListCount(process.env.MAX_LIST_COUNT, 200),
   }),
   upload: Object.freeze({
+    maxFileCount: toPositiveInteger(process.env.MAX_FILE_COUNT, 10),
     maxFileSizeBytes: toBytesFromMb(process.env.MAX_FILE_SIZE_MB, 20),
   }),
 });
