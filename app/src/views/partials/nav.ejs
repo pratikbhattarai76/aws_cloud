@@ -1,11 +1,11 @@
 <header class="topbar">
   <a class="brand" href="/">
-    <span class="brand-mark">M</span>
+    <span class="brand-mark" aria-hidden="true"></span>
     <strong><%= appName %></strong>
   </a>
 
   <nav class="nav-links" aria-label="Primary">
-    <a class="<%= currentPath === '/' ? 'is-active' : '' %>" href="/">Drop</a>
+    <a class="<%= currentPath === '/' ? 'is-active' : '' %>" href="/">Upload</a>
     <a class="<%= currentPath.startsWith('/files') ? 'is-active' : '' %>" href="/files">Library</a>
   </nav>
 </header>

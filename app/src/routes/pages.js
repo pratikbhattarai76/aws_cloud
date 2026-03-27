@@ -9,6 +9,24 @@ const { asyncHandler, getFlash, redirectWithMessage } = require("../utils/http")
 
 const router = express.Router();
 
+const isStorageUnavailableError = (error) =>
+  Boolean(
+    error &&
+      (error.code === "STORAGE_PREVIEW_MODE" ||
+        error.name === "CredentialsProviderError" ||
+        error.name === "AccessDenied" ||
+        error.name === "NoSuchBucket")
+  );
+
+const logStorageError = (label, error) => {
+  if (isStorageUnavailableError(error)) {
+    console.warn(`${label}: ${env.storage.previewMessage}`);
+    return;
+  }
+
+  console.error(`${label}:`, error);
+};
+
 const toStorageMessage = (error, fallback) => {
   if (!error) {
     return fallback;
@@ -26,16 +44,8 @@ const toStorageMessage = (error, fallback) => {
     return "That folder link is no longer valid.";
   }
 
-  if (error.name === "CredentialsProviderError") {
-    return "Storage is unavailable right now. Please check the server credentials and try again.";
-  }
-
-  if (error.name === "AccessDenied") {
-    return "This server cannot access storage right now.";
-  }
-
-  if (error.name === "NoSuchBucket") {
-    return "The storage location could not be found.";
+  if (isStorageUnavailableError(error)) {
+    return env.storage.previewMessage;
   }
 
   return fallback;
@@ -46,11 +56,15 @@ router.get(
   asyncHandler(async (req, res) => {
     const currentFolder = sanitizeFolderPath(req.query.folder);
     let folderOptions = [];
+    let storageNotice = env.storage.enabled ? "" : env.storage.previewMessage;
 
     try {
       folderOptions = await storage.listFolderPaths();
     } catch (error) {
-      console.error("List folders for upload error:", error);
+      logStorageError("List folders for upload error", error);
+      if (isStorageUnavailableError(error)) {
+        storageNotice = env.storage.previewMessage;
+      }
     }
 
     if (currentFolder && !folderOptions.includes(currentFolder)) {
@@ -58,17 +72,17 @@ router.get(
     }
 
     res.render("index", {
-      pageTitle: "Simple file drop",
       currentFolder,
       flash: getFlash(req),
       folderOptions,
+      storageNotice,
     });
   })
 );
 
 router.post(
   "/upload",
-  upload.array("files", env.upload.maxFileCount),
+  upload.array("files"),
   asyncHandler(async (req, res) => {
     const folderPath = sanitizeFolderPath(req.body.folder);
     const displayNames = Array.isArray(req.body.displayNames)
@@ -97,7 +111,7 @@ router.post(
         folder: folderPath,
       });
     } catch (error) {
-      console.error("Upload error:", error);
+      logStorageError("Upload error", error);
       return redirectWithMessage(res, "/", "error", toStorageMessage(error, "We could not upload your files."), {
         folder: folderPath,
       });
@@ -132,7 +146,7 @@ router.post(
         folder: nextFolder,
       });
     } catch (error) {
-      console.error("Create folder error:", error);
+      logStorageError("Create folder error", error);
 
       return redirectWithMessage(res, redirectTo, "error", toStorageMessage(error, "We could not create that folder."), {
         folder: parentFolder,
@@ -152,7 +166,6 @@ router.get(
       const library = await storage.listEntries(search, currentFolder);
 
       return res.render("files", {
-        pageTitle: "File library",
         flash,
         files: library.files,
         folders: library.folders,
@@ -160,13 +173,14 @@ router.get(
         parentFolder: library.parentFolder,
         search,
         hasMore: library.hasMore,
-        storageError: "",
+        storageError: library.storageNotice || "",
+        storageDisabled: Boolean(library.storageNotice),
       });
     } catch (error) {
-      console.error("List files error:", error);
+      logStorageError("List files error", error);
+      const storageUnavailable = isStorageUnavailableError(error);
 
-      return res.status(503).render("files", {
-        pageTitle: "File library",
+      return res.status(storageUnavailable ? 200 : 503).render("files", {
         flash,
         files: [],
         folders: [],
@@ -175,6 +189,7 @@ router.get(
         search,
         hasMore: false,
         storageError: toStorageMessage(error, "We could not load your files right now."),
+        storageDisabled: storageUnavailable,
       });
     }
   })
@@ -197,7 +212,7 @@ const streamFile = async (req, res, disposition) => {
 
     await pipeline(file.body, res);
   } catch (error) {
-    console.error(`${disposition} error:`, error);
+    logStorageError(`${disposition} error`, error);
 
     if (res.headersSent) {
       res.destroy(error);
@@ -244,7 +259,7 @@ router.get(
 
       await pipeline(archive.body, res);
     } catch (error) {
-      console.error("Folder download error:", error);
+      logStorageError("Folder download error", error);
 
       if (res.headersSent) {
         res.destroy(error);

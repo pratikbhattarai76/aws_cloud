@@ -1,132 +1,101 @@
 <!DOCTYPE html>
 <html lang="en">
-  <%- include("partials/head", { pageTitle }) %>
+  <%- include("partials/head") %>
   <body>
     <main class="page-shell">
       <%- include("partials/nav") %>
+      <%- include("partials/flash", { flash }) %>
 
       <% const totalSize = files.reduce((sum, file) => sum + file.size, 0); %>
       <% const uploadHref = currentFolder ? `/?folder=${encodeURIComponent(currentFolder)}` : "/"; %>
 
-      <section class="page-header" data-reveal>
+      <section class="page-intro" data-reveal>
         <div>
-          <p class="eyebrow">File Library</p>
-          <h1><%= currentFolder ? currentFolder.split("/").slice(-1)[0] : "Library" %></h1>
-          <p class="lead"><%= currentFolder ? `Current folder: ${currentFolder}` : "Browse folders and uploaded files." %></p>
+          <p class="page-kicker">Library</p>
+          <h1><%= currentFolder ? currentFolder.split("/").slice(-1)[0] : "Your Memories" %></h1>
+          <p class="page-summary"><%= currentFolder || "Browse folders and files in one place." %></p>
         </div>
-
-        <div class="page-actions">
-          <p class="page-actions-label">Search and actions</p>
-
-          <form class="search-form" action="/files" method="GET" role="search">
-            <label class="sr-only" for="q">Search files</label>
-            <% if (currentFolder) { %>
-              <input type="hidden" name="folder" value="<%= currentFolder %>" />
-            <% } %>
-            <input id="q" name="q" type="search" value="<%= search %>" placeholder="Search filenames" />
-            <% if (search) { %>
-              <a class="button button-ghost" href="<%= currentFolder ? `/files?folder=${encodeURIComponent(currentFolder)}` : '/files' %>">Clear</a>
-            <% } %>
-            <button class="button button-primary" type="submit">Search</button>
-          </form>
-
-          <div class="page-actions-row">
-            <button
-              class="button button-primary action-toggle"
-              type="button"
-              data-action-toggle
-              aria-expanded="false"
-              aria-controls="quick-actions-panel"
-            >+ Add</button>
-          </div>
-        </div>
-      </section>
-
-      <%- include("partials/flash", { flash }) %>
-
-      <section class="panel folder-toolbar" data-reveal>
-        <div class="folder-toolbar-head">
-          <div class="folder-breadcrumbs">
-            <a class="button button-ghost" href="/files">Root</a>
-            <% if (parentFolder) { %>
-              <a class="button button-ghost" href="/files?folder=<%= encodeURIComponent(parentFolder) %>">Back</a>
-            <% } %>
-          </div>
-
-          <div class="folder-toolbar-actions">
-            <% if (currentFolder) { %>
-              <a
-                class="button button-ghost"
-                href="/folders/download?folder=<%= encodeURIComponent(currentFolder) %>&returnFolder=<%= encodeURIComponent(currentFolder) %>"
-              >Download folder</a>
-            <% } %>
-            <a class="button button-secondary" href="<%= uploadHref %>">Upload here</a>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel quick-actions-panel" id="quick-actions-panel" data-actions-panel hidden>
-        <div class="quick-actions-grid">
-          <div class="quick-action-card">
-            <p class="eyebrow">Create Folder</p>
-            <h2>Make a folder here</h2>
-            <p class="supporting-text">Add one folder per line. Use `/` for nested folders like `2026/invoices/march`.</p>
-
-            <form class="folder-form" action="/folders" method="POST">
-              <input type="hidden" name="parentFolder" value="<%= currentFolder %>" />
-              <label class="sr-only" for="folderNames">Folder names</label>
-              <textarea
-                id="folderNames"
-                name="folderNames"
-                class="text-input folder-textarea"
-                required
-              ></textarea>
-              <button class="button button-primary" type="submit">Create folder</button>
-            </form>
-          </div>
-
-          <div class="quick-action-card">
-            <p class="eyebrow">Upload Files</p>
-            <h2>Add files in this folder</h2>
-            <p class="supporting-text">Open the uploader with this folder already selected.</p>
-            <a class="button button-secondary" href="<%= uploadHref %>">Upload into this folder</a>
-          </div>
+        <div class="page-intro-actions">
+          <a class="button button-secondary" href="<%= uploadHref %>">Upload here</a>
+          <% if (currentFolder) { %>
+            <a
+              class="button button-ghost"
+              href="/folders/download?folder=<%= encodeURIComponent(currentFolder) %>&returnFolder=<%= encodeURIComponent(currentFolder) %>"
+            >Download folder</a>
+          <% } %>
         </div>
       </section>
 
       <% if (storageError) { %>
-        <section class="panel callout error-callout" data-reveal>
-          <p class="eyebrow">Storage Notice</p>
-          <h2>File library is temporarily unavailable</h2>
-          <p class="supporting-text"><%= storageError %></p>
+        <section class="notice <%= storageDisabled ? '' : 'notice-error' %>" data-reveal>
+          <div>
+            <p class="page-kicker"><%= storageDisabled ? "Local mode" : "Storage notice" %></p>
+            <p class="notice-text"><%= storageError %></p>
+          </div>
         </section>
       <% } %>
 
-      <section class="summary-grid">
-        <article class="panel summary-card" data-reveal>
-          <p class="eyebrow">Folders</p>
-          <strong><%= folders.length %></strong>
-          <p class="supporting-text">Folders visible in this location.</p>
-        </article>
+      <section class="panel library-toolbar" data-reveal>
+        <section class="inline-folder-panel folder-popover library-folder-panel" id="library-folder-panel" data-library-folder-panel hidden>
+          <form class="inline-folder-form" action="/folders" method="POST">
+            <input type="hidden" name="parentFolder" value="<%= currentFolder %>" />
+            <label class="sr-only" for="libraryFolderNames">Folder names</label>
+            <textarea
+              id="libraryFolderNames"
+              name="folderNames"
+              class="text-input folder-textarea"
+              placeholder="Folder name or nested path"
+              required
+            ></textarea>
+            <% if (storageDisabled) { %>
+              <p class="preview-meta">This machine can show the UI, but folder creation only works when storage is available.</p>
+            <% } %>
+            <div class="inline-folder-actions">
+              <button class="button button-ghost" type="button" data-panel-close>Cancel</button>
+              <button class="button button-primary" type="submit" <%= storageDisabled ? "disabled" : "" %>>Create folder</button>
+            </div>
+          </form>
+        </section>
 
-        <article class="panel summary-card" data-reveal>
-          <p class="eyebrow">Files</p>
-          <strong><%= files.length %></strong>
-          <p class="supporting-text">
-            <%= search ? "Matching files in the current search." : "Files visible in this folder." %>
-          </p>
-        </article>
+        <div class="toolbar-top">
+          <div class="breadcrumbs">
+            <a class="path-chip path-chip-link" href="/files">Root</a>
+            <% if (parentFolder) { %>
+              <a class="path-chip path-chip-link" href="/files?folder=<%= encodeURIComponent(parentFolder) %>">Back</a>
+            <% } %>
+            <% if (currentFolder) { %>
+              <span class="path-chip path-chip-current"><%= currentFolder %></span>
+            <% } %>
+          </div>
 
-        <article class="panel summary-card" data-reveal>
-          <p class="eyebrow">Storage</p>
-          <strong><%= formatBytes(totalSize) %></strong>
-          <p class="supporting-text">Combined size of the files shown on this page.</p>
-        </article>
+          <button
+            class="button button-ghost button-small"
+            type="button"
+            data-library-folder-toggle
+            aria-expanded="false"
+            aria-controls="library-folder-panel"
+          >Create folder</button>
+        </div>
+
+        <form class="search-form" action="/files" method="GET" role="search">
+          <label class="sr-only" for="q">Search files</label>
+          <% if (currentFolder) { %>
+            <input type="hidden" name="folder" value="<%= currentFolder %>" />
+          <% } %>
+          <input id="q" name="q" type="search" class="text-input" value="<%= search %>" placeholder="Search this view" />
+          <% if (search) { %>
+            <a class="button button-ghost" href="<%= currentFolder ? `/files?folder=${encodeURIComponent(currentFolder)}` : '/files' %>">Clear</a>
+          <% } %>
+          <button class="button button-primary" type="submit">Search</button>
+        </form>
+
+        <p class="toolbar-summary">
+          <%= folders.length %> folders · <%= files.length %> files · <%= formatBytes(totalSize) %> shown
+        </p>
       </section>
 
       <% if (!folders.length && !files.length) { %>
         <section class="panel empty-state" data-reveal>
-          <p class="eyebrow">Nothing here yet</p>
           <h1><%= search ? "No files match that search." : "This folder is empty." %></h1>
           <p>
             <%= search ? `Try another filename or clear the filter.` : "Create a folder or upload files here." %>
@@ -141,11 +110,10 @@
       <% } %>
 
       <% if (folders.length) { %>
-        <section class="panel file-library" data-reveal>
+        <section class="panel listing-section" data-reveal>
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Folders</p>
-              <h2><%= search ? "Matching folders" : "Folders" %></h2>
+              <h2>Folders</h2>
             </div>
           </div>
 
@@ -153,10 +121,13 @@
             <% folders.forEach(folder => { %>
               <article class="file-row" role="listitem">
                 <div class="file-row-main">
-                  <span class="file-kind" aria-label="Folder">DIR</span>
+                  <span class="file-kind" aria-label="Folder">Folder</span>
 
                   <div class="file-copy">
                     <h2 class="file-name"><%= folder.name %></h2>
+                    <p class="file-meta">
+                      <span><%= folder.path %></span>
+                    </p>
                   </div>
                 </div>
 
@@ -174,10 +145,9 @@
       <% } %>
 
       <% if (files.length) { %>
-        <section class="panel file-library" data-reveal>
+        <section class="panel listing-section" data-reveal>
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Files</p>
               <h2><%= search ? `Results for "${search}"` : "Files" %></h2>
             </div>
             <div class="section-actions">

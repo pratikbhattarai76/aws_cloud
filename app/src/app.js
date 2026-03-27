@@ -4,7 +4,7 @@ const path = require("path");
 
 const env = require("./config/env");
 const routes = require("./routes/pages");
-const { formatBytes, formatDate } = require("./utils/file-utils");
+const { formatBytes, formatDate, sanitizeFolderPath } = require("./utils/file-utils");
 const { redirectWithMessage } = require("./utils/http");
 
 const app = express();
@@ -20,30 +20,36 @@ app.use((req, res, next) => {
   res.locals.appName = env.appName;
   res.locals.assetVersion = env.assetVersion;
   res.locals.currentPath = req.path;
-  res.locals.maxFileCount = env.upload.maxFileCount;
-  res.locals.maxFileSize = formatBytes(env.upload.maxFileSizeBytes);
   res.locals.formatBytes = formatBytes;
   res.locals.formatDate = formatDate;
   next();
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    appName: env.appName,
+    storageMode: env.storage.mode,
+  });
 });
 
 app.use(routes);
 
 app.use((req, res) => {
   res.status(404).render("error", {
-    pageTitle: "Not Found",
     heading: "Page not found",
     message: "The page you requested does not exist.",
   });
 });
 
 app.use((error, req, res, next) => {
-  if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
-    return redirectWithMessage(res, "/", "error", `Files can be up to ${formatBytes(env.upload.maxFileSizeBytes)}.`);
-  }
+  const isXmlHttpRequest = String(req.get("x-requested-with") || "").toLowerCase() === "xmlhttprequest";
+  const folder = sanitizeFolderPath(req.body?.folder);
 
-  if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_COUNT") {
-    return redirectWithMessage(res, "/", "error", `Upload up to ${env.upload.maxFileCount} files at a time.`);
+  if (error instanceof multer.MulterError) {
+    return redirectWithMessage(res, "/", "error", "The upload request could not be processed. Please try again.", {
+      folder,
+    });
   }
 
   console.error("Unhandled error:", error);
@@ -52,8 +58,13 @@ app.use((error, req, res, next) => {
     return next(error);
   }
 
+  if (isXmlHttpRequest) {
+    return res.status(error.statusCode || 500).json({
+      error: "The app hit an unexpected problem. Please try again.",
+    });
+  }
+
   return res.status(error.statusCode || 500).render("error", {
-    pageTitle: "Something went wrong",
     heading: "Something went wrong",
     message: "The app hit an unexpected problem. Please try again.",
   });

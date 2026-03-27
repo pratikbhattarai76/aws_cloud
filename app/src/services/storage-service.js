@@ -1,3 +1,4 @@
+const { createReadStream } = require("fs");
 const {
   GetObjectCommand,
   ListObjectsV2Command,
@@ -5,12 +6,14 @@ const {
   S3Client,
 } = require("@aws-sdk/client-s3");
 const archiver = require("archiver");
+const { unlink } = require("fs/promises");
 const { PassThrough } = require("stream");
 const { pipeline } = require("stream/promises");
 
 const env = require("../config/env");
 const {
   buildObjectKey,
+  createCollisionDisplayName,
   decodeFileId,
   encodeFileId,
   getFolderPathFromKey,
@@ -23,16 +26,30 @@ const {
   sanitizeFolderPath,
 } = require("../utils/file-utils");
 
-const s3 = new S3Client({ region: env.storage.region });
+const s3 = env.storage.enabled ? new S3Client({ region: env.storage.region }) : null;
 
-const prefix = env.storage.prefix;
-const basePrefix = `${prefix}/`;
-const FOLDER_PATH_CACHE_TTL_MS = 30 * 1000;
+const prefix = "";
+const basePrefix = "";
+const MAX_LIST_COUNT = 200;
+const FOLDER_PATH_CACHE_TTL_MS = 5 * 60 * 1000;
 const folderPathCache = {
   value: null,
   expiresAt: 0,
   pending: null,
   generation: 0,
+};
+
+const createStoragePreviewError = () => {
+  const error = new Error(env.storage.previewMessage);
+  error.code = "STORAGE_PREVIEW_MODE";
+  error.statusCode = 503;
+  return error;
+};
+
+const ensureStorageEnabled = () => {
+  if (!env.storage.enabled) {
+    throw createStoragePreviewError();
+  }
 };
 
 const toFileSummary = (object) => {
@@ -54,7 +71,6 @@ const toDirectFolder = (currentFolder, name) => {
   return {
     name,
     path,
-    parentPath: getParentFolderPath(path),
   };
 };
 
@@ -67,13 +83,25 @@ const invalidateFolderPathCache = () => {
 
 const listEntries = async (search, folder = "") => {
   const currentFolder = sanitizeFolderPath(folder);
+
+  if (!env.storage.enabled) {
+    return {
+      currentFolder,
+      files: [],
+      folders: [],
+      hasMore: false,
+      parentFolder: getParentFolderPath(currentFolder),
+      storageNotice: env.storage.previewMessage,
+    };
+  }
+
   const currentPrefix = currentFolder ? `${basePrefix}${currentFolder}/` : basePrefix;
   const response = await s3.send(
     new ListObjectsV2Command({
       Bucket: env.storage.bucketName,
       Prefix: currentPrefix,
       Delimiter: "/",
-      MaxKeys: env.storage.maxListCount,
+      MaxKeys: MAX_LIST_COUNT,
     })
   );
   const searchNeedle = normalizeSearch(search);
@@ -104,6 +132,7 @@ const listEntries = async (search, folder = "") => {
     folders,
     hasMore: Boolean(response.IsTruncated),
     parentFolder: getParentFolderPath(currentFolder),
+    storageNotice: "",
   };
 };
 
@@ -160,6 +189,10 @@ const collectFolderPaths = async () => {
 };
 
 const listFolderPaths = async () => {
+  if (!env.storage.enabled) {
+    return [];
+  }
+
   if (folderPathCache.value && folderPathCache.expiresAt > Date.now()) {
     return folderPathCache.value;
   }
@@ -197,6 +230,64 @@ const listFolderObjectsPage = (folderPrefix, continuationToken) =>
     })
   );
 
+const removeUploadedTempFiles = async (files = []) => {
+  await Promise.all(
+    files
+      .map((file) => file?.path)
+      .filter(Boolean)
+      .map(async (filePath) => {
+        try {
+          await unlink(filePath);
+        } catch (error) {
+          if (error?.code !== "ENOENT") {
+            console.warn(`Temporary upload cleanup failed for ${filePath}:`, error);
+          }
+        }
+      })
+  );
+};
+
+const listDirectFileDisplayNames = async (folderPath = "") => {
+  const currentFolder = sanitizeFolderPath(folderPath);
+  const currentPrefix = currentFolder ? `${basePrefix}${currentFolder}/` : basePrefix;
+  const displayNames = new Set();
+  let continuationToken;
+
+  do {
+    const response = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: env.storage.bucketName,
+        Prefix: currentPrefix,
+        Delimiter: "/",
+        MaxKeys: 1000,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    (response.Contents || [])
+      .filter((object) => object.Key && object.Key !== currentPrefix && !object.Key.endsWith("/"))
+      .map((object) => parseDisplayNameFromKey(object.Key))
+      .forEach((displayName) => displayNames.add(displayName));
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return displayNames;
+};
+
+const createUniqueDisplayName = (displayName, existingNames) => {
+  let nextDisplayName = sanitizeDisplayName(displayName);
+  let collisionIndex = 1;
+
+  while (existingNames.has(nextDisplayName)) {
+    nextDisplayName = createCollisionDisplayName(displayName, collisionIndex);
+    collisionIndex += 1;
+  }
+
+  existingNames.add(nextDisplayName);
+  return nextDisplayName;
+};
+
 const appendFolderObjectToArchive = async (archive, folderPrefix, archiveRoot, object) => {
   if (!object.Key || !object.Key.startsWith(folderPrefix)) {
     return;
@@ -227,42 +318,56 @@ const appendFolderObjectToArchive = async (archive, folderPrefix, archiveRoot, o
 };
 
 const uploadFiles = async (files, options = {}) => {
-  const displayNames = toArray(options.displayNames);
-  const relativePaths = toArray(options.relativePaths);
-  const folderPath = sanitizeFolderPath(options.folderPath);
+  const safeFiles = Array.isArray(files) ? files : [];
 
-  const uploadedFiles = await Promise.all(
-    files.map(async (file, index) => {
+  try {
+    ensureStorageEnabled();
+    const displayNames = toArray(options.displayNames);
+    const relativePaths = toArray(options.relativePaths);
+    const folderPath = sanitizeFolderPath(options.folderPath);
+    const folderNameCache = new Map();
+    const uploadedFiles = [];
+
+    for (const [index, file] of safeFiles.entries()) {
       const preferredName =
         typeof displayNames[index] === "string" && displayNames[index].trim()
           ? displayNames[index]
           : file.originalname;
-      const displayName = sanitizeDisplayName(preferredName);
       const fileFolderPath = [folderPath, sanitizeFolderPath(relativePaths[index])].filter(Boolean).join("/");
-      const key = buildObjectKey(displayName, env.storage.prefix, fileFolderPath);
+
+      if (!folderNameCache.has(fileFolderPath)) {
+        folderNameCache.set(fileFolderPath, await listDirectFileDisplayNames(fileFolderPath));
+      }
+
+      const existingNames = folderNameCache.get(fileFolderPath);
+      const displayName = createUniqueDisplayName(preferredName, existingNames);
+      const key = buildObjectKey(displayName, prefix, fileFolderPath);
 
       await s3.send(
         new PutObjectCommand({
           Bucket: env.storage.bucketName,
           Key: key,
-          Body: file.buffer,
+          Body: createReadStream(file.path),
+          ContentLength: file.size,
           ContentType: file.mimetype || "application/octet-stream",
         })
       );
 
-      return {
+      uploadedFiles.push({
         id: encodeFileId(key),
         displayName,
-        folderPath,
-      };
-    })
-  );
+      });
+    }
 
-  invalidateFolderPathCache();
-  return uploadedFiles;
+    invalidateFolderPathCache();
+    return uploadedFiles;
+  } finally {
+    await removeUploadedTempFiles(safeFiles);
+  }
 };
 
 const createFolders = async (folderNames, parentFolder = "") => {
+  ensureStorageEnabled();
   const names = toArray(folderNames)
     .flatMap((value) =>
       String(value || "")
@@ -310,6 +415,7 @@ const createFolders = async (folderNames, parentFolder = "") => {
 };
 
 const getFolderArchive = async (folderPath) => {
+  ensureStorageEnabled();
   const currentFolder = sanitizeFolderPath(folderPath);
 
   if (!currentFolder) {
@@ -322,9 +428,8 @@ const getFolderArchive = async (folderPath) => {
   const folderPrefix = `${basePrefix}${currentFolder}/`;
   const archiveRoot = sanitizeFolderName(currentFolder) || "folder";
   const firstPage = await listFolderObjectsPage(folderPrefix);
-  const folderObjects = (firstPage.Contents || []).filter((object) => object.Key && object.Key.startsWith(folderPrefix));
 
-  if (!folderObjects.length) {
+  if (!(firstPage.Contents || []).some((object) => object.Key && object.Key.startsWith(folderPrefix))) {
     const error = new Error("Folder not found");
     error.code = "FOLDER_NOT_FOUND";
     error.statusCode = 404;
@@ -365,6 +470,7 @@ const getFolderArchive = async (folderPath) => {
 };
 
 const getFileById = async (fileId) => {
+  ensureStorageEnabled();
   const key = decodeFileId(fileId);
   const displayName = parseDisplayNameFromKey(key);
 

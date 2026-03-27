@@ -22,7 +22,14 @@ const redirectWithMessage = (res, pathname, type, message, extraParams = {}) => 
   });
 
   const query = params.toString();
-  return res.redirect(query ? `${pathname}?${query}` : pathname);
+  const nextLocation = query ? `${pathname}?${query}` : pathname;
+  const isXmlHttpRequest = String(res.req?.get?.("x-requested-with") || "").toLowerCase() === "xmlhttprequest";
+
+  if (isXmlHttpRequest) {
+    return res.json({ redirectTo: nextLocation });
+  }
+
+  return res.redirect(nextLocation);
 };
 
 module.exports = {

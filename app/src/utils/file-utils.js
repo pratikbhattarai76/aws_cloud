@@ -1,4 +1,3 @@
-const crypto = require("crypto");
 const path = require("path");
 
 const sanitizeDisplayName = (value) => {
@@ -44,13 +43,19 @@ const sanitizeFolderName = (value) => {
 };
 
 const buildObjectKey = (displayName, prefix, folderPath = "") => {
-  const uniquePart = `${Date.now()}-${crypto.randomUUID()}`;
   const encodedName = encodeURIComponent(displayName);
-  const objectName = `${uniquePart}__${encodedName}`;
   const safeFolderPath = sanitizeFolderPath(folderPath);
   const pathSegments = safeFolderPath ? safeFolderPath.split("/") : [];
 
-  return [prefix, ...pathSegments, objectName].join("/");
+  return [prefix, ...pathSegments, encodedName].filter(Boolean).join("/");
+};
+
+const createCollisionDisplayName = (displayName, collisionIndex) => {
+  const safeDisplayName = sanitizeDisplayName(displayName);
+  const extension = path.extname(safeDisplayName);
+  const stem = extension ? safeDisplayName.slice(0, -extension.length) : safeDisplayName;
+
+  return sanitizeDisplayName(`${stem} (${collisionIndex})${extension}`);
 };
 
 const parseDisplayNameFromKey = (key) => {
@@ -189,6 +194,7 @@ const getFileKind = (fileName) => {
 
 module.exports = {
   buildContentDisposition,
+  createCollisionDisplayName,
   buildObjectKey,
   decodeFileId,
   encodeFileId,

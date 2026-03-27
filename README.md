@@ -47,33 +47,6 @@ npm install
 npm start
 ```
 
-The app loads environment variables from `app/src/.env`.
-
-Minimum required variables:
-
-- `AWS_REGION`
-- `S3_BUCKET_NAME`
-
-Optional variables:
-
-- `PORT`
-- `S3_PREFIX`
-- `MAX_FILE_SIZE_MB`
-- `MAX_FILE_COUNT`
-- `MAX_LIST_COUNT`
-
-Current upload behavior:
-
-- Up to `10` files per upload by default
-- Each file can be up to `20 MB` by default
-
-You can also run the app directly from `app/src`:
-
-```bash
-cd app/src
-npm start
-```
-
 ---
 
 ## 🏗️ Architecture
