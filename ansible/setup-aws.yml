@@ -1,3 +1,6 @@
+# THis is the first step for the new server setup. It contains the steps of bootstrapping the AWS server.
+# The main work is Updating Server, Setupping the Official keys for docker, APT source for docker, and creating docker and scripts folder for placing the docker compose yml files for the services from development device.
+
 - name: Setup AWS server
   hosts: aws
   become: true

@@ -1,3 +1,5 @@
+# This is the second step of ansible. Here, the docker and script files are copied from my laptop into the server docker and scripts directory respectively.
+
 - name: Prepare deployment folder for file upload app
   hosts: aws
   become: true
@@ -35,7 +37,7 @@
     - name: Copy .env file
       copy:
         src: ../app/src/.env
-        dest: "{{ app_path }}/app/.env"
+        dest: "{{ app_path }}/.env"
         owner: ubuntu
         group: ubuntu
         mode: "0600"
