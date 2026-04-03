@@ -9,7 +9,8 @@
     "npm": ">=11"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "ci:verify": "node --check server.js && node -e \"require('./app'); console.log('CI verification passed')\""
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1017.0",
