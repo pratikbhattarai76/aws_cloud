@@ -49,7 +49,7 @@ This project follows a cloud-native deployment approach where infrastructure, ap
 
 ## 💻 Local Run
 
-From the project root:
+From the application directory:
 
 ```bash
 cd app/src
