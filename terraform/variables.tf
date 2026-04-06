@@ -1,32 +1,14 @@
-variable "aws_region" {
-  description = "AWS Region"
-  type        = string
-}
-
-# ami_id is the Amazon Machine Image for EC2
-variable "ami_id" {
-  description = "AMI ID for EC2 Instance"
-  type        = string
-}
-
-variable "instance_type" {
-  description = "EC2 Instance Type"
-  type        = string
-}
-
-variable "key_name" {
-  description = "Existing EC2 Key Pair Name"
-  type        = string
-}
-
-variable "s3_bucket_name" {
-  description = "S3 Bucker Name"
-  type        = string
-}
+variable "aws_region" { type = string }
+variable "ami_id" { type = string }
+variable "instance_type" { type = string }
+variable "key_name" { type = string }
+variable "s3_bucket_name" { type = string }
 
 variable "ssh_cidr" {
-  description = "CIDR block allowed to SSH"
+  description = "CIDR for SSH access"
   type        = string
 }
 
-
+variable "malaideu_port" {
+  type = number
+}

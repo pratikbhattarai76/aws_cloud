@@ -12,3 +12,13 @@ pnpm-debug.log*
 
 # Editor files
 .vscode/
+
+#TERRAFORM
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+override.tf
+override.tf.json
+*_override.tf.json
+.terraform.lock.hcl
