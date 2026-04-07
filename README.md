@@ -7,8 +7,10 @@ The application allows users to upload, organize, browse, and retrieve files usi
 ---
 
 ## 🔗 Live Demo
-
+### MalaiDeu
 https://malaideu.pratik-labs.xyz
+### Test
+https://test.pratik-labs.xyz
 
 ---
 
