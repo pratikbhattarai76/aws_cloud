@@ -26,6 +26,7 @@ const {
   sanitizeFolderPath,
 } = require("../utils/file-utils");
 
+// Initialize S3 client if storage is enabled
 const s3 = env.storage.enabled ? new S3Client({ region: env.storage.region }) : null;
 
 const prefix = "";

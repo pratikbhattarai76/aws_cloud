@@ -26,7 +26,7 @@
         group: ubuntu
         mode: "0755"
 
-    - name: Copy docker-compose.yml
+    - name: Copy docker-compose.yml for MalaiDeu
       copy:
         src: ../docker/docker-compose.yml
         dest: "{{ app_path }}/docker-compose.yml"
@@ -42,3 +42,7 @@
         group: ubuntu
         mode: "0600"
 
+    - name: Start MalaiDeu application with Docker Compose
+      command: docker compose up -d
+      args:
+        chdir: "{{ app_path }}"
