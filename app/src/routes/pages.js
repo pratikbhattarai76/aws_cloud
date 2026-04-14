@@ -76,6 +76,7 @@ router.get(
       flash: getFlash(req),
       folderOptions,
       storageNotice,
+      uploadMaxFileSizeBytes: env.upload.maxFileSizeBytes,
     });
   })
 );

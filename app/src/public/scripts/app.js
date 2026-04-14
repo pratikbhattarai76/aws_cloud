@@ -28,6 +28,7 @@ let selectedFileState = [];
 let selectedDisplayNameState = [];
 const MAX_VISIBLE_FILE_ROWS = 24;
 let syncSelectedFileInputsForSubmit = () => {};
+const uploadMaxBytes = Number.parseInt(uploadForm?.dataset.uploadMaxBytes || "0", 10) || 0;
 
 const formatBytes = (bytes) => {
   if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -65,6 +66,21 @@ const getSelectedUploadLabel = () => {
 
   const countLabel = fileCount === 1 ? "1 file selected" : `${fileCount} files selected`;
   return `${countLabel} / ${formatBytes(totalBytes)}`;
+};
+
+const getUploadSizeError = (oversizedFiles) => {
+  if (!Array.isArray(oversizedFiles) || !oversizedFiles.length) {
+    return "";
+  }
+
+  const maxSizeLabel = formatBytes(uploadMaxBytes);
+  const exampleFile = oversizedFiles[0];
+
+  if (oversizedFiles.length === 1) {
+    return `${exampleFile.name} is ${formatBytes(exampleFile.size)} and exceeds the ${maxSizeLabel} upload limit.`;
+  }
+
+  return `${oversizedFiles.length} files exceed the ${maxSizeLabel} upload limit.`;
 };
 
 const setUploadProgressState = ({ hidden = false, status = "Ready to upload.", meta = getSelectedUploadLabel(), percent = 0, error = false } = {}) => {
@@ -387,18 +403,36 @@ if (dropzone && fileInput && fileLabel) {
 
   const mergeFiles = (incomingFiles) => {
     const nextFiles = Array.from(incomingFiles || []);
-    resetUploadProgress(true);
 
     if (!nextFiles.length) {
+      resetUploadProgress(true);
       renderFiles();
       return;
     }
+
+    const oversizedFiles =
+      uploadMaxBytes > 0 ? nextFiles.filter((file) => Number(file.size) > uploadMaxBytes) : [];
+    const acceptedFiles =
+      oversizedFiles.length > 0 ? nextFiles.filter((file) => Number(file.size) <= uploadMaxBytes) : nextFiles;
+
+    if (!acceptedFiles.length && oversizedFiles.length) {
+      setUploadProgressState({
+        hidden: false,
+        percent: 0,
+        status: "Some files were not added.",
+        meta: getUploadSizeError(oversizedFiles),
+        error: true,
+      });
+      return;
+    }
+
+    resetUploadProgress(true);
 
     const existingKeys = new Set(
       selectedFileState.map((file) => `${file.name}:${file.size}:${file.lastModified}:${file.type}`)
     );
 
-    nextFiles.forEach((file) => {
+    acceptedFiles.forEach((file) => {
       const fileKey = `${file.name}:${file.size}:${file.lastModified}:${file.type}`;
 
       if (!existingKeys.has(fileKey)) {
@@ -410,6 +444,16 @@ if (dropzone && fileInput && fileLabel) {
 
     syncInputFiles();
     renderFiles();
+
+    if (oversizedFiles.length) {
+      setUploadProgressState({
+        hidden: false,
+        percent: 0,
+        status: "Some files were skipped.",
+        meta: getUploadSizeError(oversizedFiles),
+        error: true,
+      });
+    }
   };
 
   const clearSelection = () => {
@@ -471,7 +515,13 @@ if (dropzone && fileInput && fileLabel) {
   });
 
   fileInput.addEventListener("change", () => mergeFiles(fileInput.files));
+  fileInput.addEventListener("change", () => {
+    fileInput.value = "";
+  });
   folderInput?.addEventListener("change", () => mergeFiles(folderInput.files));
+  folderInput?.addEventListener("change", () => {
+    folderInput.value = "";
+  });
   uploadTargetSelect?.addEventListener("change", syncUploadFolderParent);
   pickerMode?.addEventListener("change", () => {
     clearSelection();
@@ -571,14 +621,20 @@ if (uploadForm && submitButton) {
       }
 
       setUploadingState(false);
+      const responseError =
+        typeof request.response?.error === "string" && request.response.error
+          ? request.response.error
+          : request.status === 413
+            ? uploadMaxBytes > 0
+              ? `These files exceed the ${formatBytes(uploadMaxBytes)} upload limit for this server.`
+              : "These files are too large for this upload endpoint."
+            : "Please try again.";
+
       setUploadProgressState({
         hidden: false,
         percent: 0,
         status: "We could not upload those files.",
-        meta:
-          typeof request.response?.error === "string" && request.response.error
-            ? request.response.error
-            : "Please try again.",
+        meta: responseError,
         error: true,
       });
     });

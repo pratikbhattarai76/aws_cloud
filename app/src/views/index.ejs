@@ -49,7 +49,14 @@
           </form>
         </section>
 
-        <form action="/upload" method="POST" enctype="multipart/form-data" class="upload-form" data-upload-form>
+        <form
+          action="/upload"
+          method="POST"
+          enctype="multipart/form-data"
+          class="upload-form"
+          data-upload-form
+          data-upload-max-bytes="<%= uploadMaxFileSizeBytes %>"
+        >
           <input class="sr-only" type="file" name="files" id="files" data-file-input multiple required />
           <input class="sr-only" type="file" id="folders" data-folder-input webkitdirectory directory multiple />
 

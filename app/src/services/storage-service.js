@@ -350,7 +350,7 @@ const uploadFiles = async (files, options = {}) => {
         params: {
           Bucket: env.storage.bucketName,
           Key: key,
-          Body: createReadStream(file.path),
+          Body: Number(file.size) > 0 ? createReadStream(file.path) : Buffer.alloc(0),
           ContentLength: file.size,
           ContentType: file.mimetype || "application/octet-stream",
         },
