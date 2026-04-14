@@ -515,9 +515,6 @@ if (dropzone && fileInput && fileLabel) {
   });
 
   fileInput.addEventListener("change", () => mergeFiles(fileInput.files));
-  fileInput.addEventListener("change", () => {
-    fileInput.value = "";
-  });
   folderInput?.addEventListener("change", () => mergeFiles(folderInput.files));
   folderInput?.addEventListener("change", () => {
     folderInput.value = "";
