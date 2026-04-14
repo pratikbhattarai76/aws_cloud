@@ -5,7 +5,6 @@ const {
   PutObjectCommand,
   S3Client,
 } = require("@aws-sdk/client-s3");
-const { Upload } = require("@aws-sdk/lib-storage");
 const archiver = require("archiver");
 const { unlink } = require("fs/promises");
 const { PassThrough } = require("stream");
@@ -32,7 +31,6 @@ const s3 = env.storage.enabled ? new S3Client({ region: env.storage.region }) : 
 
 const prefix = "";
 const basePrefix = "";
-const MAX_LIST_COUNT = 200;
 const FOLDER_PATH_CACHE_TTL_MS = 5 * 60 * 1000;
 const folderPathCache = {
   value: null,
@@ -91,35 +89,50 @@ const listEntries = async (search, folder = "") => {
       currentFolder,
       files: [],
       folders: [],
-      hasMore: false,
       parentFolder: getParentFolderPath(currentFolder),
       storageNotice: env.storage.previewMessage,
     };
   }
 
   const currentPrefix = currentFolder ? `${basePrefix}${currentFolder}/` : basePrefix;
-  const response = await s3.send(
-    new ListObjectsV2Command({
-      Bucket: env.storage.bucketName,
-      Prefix: currentPrefix,
-      Delimiter: "/",
-      MaxKeys: MAX_LIST_COUNT,
-    })
-  );
   const searchNeedle = normalizeSearch(search);
-  const folders = (response.CommonPrefixes || [])
-    .map((entry) => String(entry.Prefix || ""))
-    .map((entryPrefix) => entryPrefix.slice(currentPrefix.length).replace(/\/$/, ""))
-    .map((folderName) => sanitizeFolderPath(folderName))
-    .filter(Boolean)
-    .filter((folderName) => !searchNeedle || normalizeSearch(folderName).includes(searchNeedle))
-    .map((folderName) => toDirectFolder(currentFolder, folderName))
-    .sort((left, right) => left.name.localeCompare(right.name));
+  const foldersByPath = new Map();
+  const files = [];
+  let continuationToken;
 
-  const files = (response.Contents || [])
-    .filter((object) => object.Key && object.Key !== currentPrefix && !object.Key.endsWith("/"))
-    .map((object) => toFileSummary(object))
-    .filter((file) => !searchNeedle || normalizeSearch(file.displayName).includes(searchNeedle));
+  do {
+    const response = await s3.send(
+      new ListObjectsV2Command({
+        Bucket: env.storage.bucketName,
+        Prefix: currentPrefix,
+        Delimiter: "/",
+        MaxKeys: 1000,
+        ContinuationToken: continuationToken,
+      })
+    );
+
+    (response.CommonPrefixes || [])
+      .map((entry) => String(entry.Prefix || ""))
+      .map((entryPrefix) => entryPrefix.slice(currentPrefix.length).replace(/\/$/, ""))
+      .map((folderName) => sanitizeFolderPath(folderName))
+      .filter(Boolean)
+      .forEach((folderName) => {
+        if (!searchNeedle || normalizeSearch(folderName).includes(searchNeedle)) {
+          const directFolder = toDirectFolder(currentFolder, folderName);
+          foldersByPath.set(directFolder.path, directFolder);
+        }
+      });
+
+    (response.Contents || [])
+      .filter((object) => object.Key && object.Key !== currentPrefix && !object.Key.endsWith("/"))
+      .map((object) => toFileSummary(object))
+      .filter((file) => !searchNeedle || normalizeSearch(file.displayName).includes(searchNeedle))
+      .forEach((file) => files.push(file));
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  const folders = [...foldersByPath.values()].sort((left, right) => left.name.localeCompare(right.name));
 
   files.sort((left, right) => {
     const leftTime = left.uploadedAt ? new Date(left.uploadedAt).getTime() : 0;
@@ -132,7 +145,6 @@ const listEntries = async (search, folder = "") => {
     currentFolder,
     files,
     folders,
-    hasMore: Boolean(response.IsTruncated),
     parentFolder: getParentFolderPath(currentFolder),
     storageNotice: "",
   };
@@ -345,16 +357,15 @@ const uploadFiles = async (files, options = {}) => {
       const displayName = createUniqueDisplayName(preferredName, existingNames);
       const key = buildObjectKey(displayName, prefix, fileFolderPath);
 
-      await new Upload({
-        client: s3,
-        params: {
+      await s3.send(
+        new PutObjectCommand({
           Bucket: env.storage.bucketName,
           Key: key,
           Body: Number(file.size) > 0 ? createReadStream(file.path) : Buffer.alloc(0),
           ContentLength: file.size,
           ContentType: file.mimetype || "application/octet-stream",
-        },
-      }).done();
+        })
+      );
 
       uploadedFiles.push({
         id: encodeFileId(key),

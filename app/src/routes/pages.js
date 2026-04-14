@@ -173,7 +173,6 @@ router.get(
         currentFolder: library.currentFolder,
         parentFolder: library.parentFolder,
         search,
-        hasMore: library.hasMore,
         storageError: library.storageNotice || "",
         storageDisabled: Boolean(library.storageNotice),
       });
@@ -188,7 +187,6 @@ router.get(
         currentFolder,
         parentFolder: "",
         search,
-        hasMore: false,
         storageError: toStorageMessage(error, "We could not load your files right now."),
         storageDisabled: storageUnavailable,
       });
@@ -277,12 +275,5 @@ router.get(
     }
   })
 );
-
-router.get("/health", (req, res) => {
-  res.json({
-    app: env.appName,
-    status: "ok",
-  });
-});
 
 module.exports = router;
