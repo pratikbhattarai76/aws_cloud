@@ -86,7 +86,7 @@ Terraform is responsible for provisioning the AWS infrastructure required by the
 It creates:
 
 - EC2 instance
-- Application Load Blancer
+- Application Load balancer
 - Target Group
 - S3 bucket
 - IAM role and instance profile

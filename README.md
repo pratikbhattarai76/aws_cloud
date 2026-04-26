@@ -7,6 +7,8 @@ The application allows users to upload, organize, browse, and retrieve files usi
 ---
 
 ## 🔗 Live Demo
+
+> **Note:** The AWS infrastructure has been dowm to avoid costs. The live URLs below are no longer active. SEE [Screenshots](screemshots/) for the proof of working demo.
 ### MalaiDeu
 https://malaideu.pratik-labs.xyz
 ### Test
@@ -217,7 +219,7 @@ Ansible is used after provisioning to configure the EC2 instance:
 - Understanding ALB, target groups, and request routing
 - Implementing host-based routing using AWS ALB
 - Serving multiple applications behind a single load balancer
-- Understanding listener rules, pririties, and target groups
+- Understanding listener rules, priorities, and target groups
 - Applying container resource limits in Docker Compose
 - Implementing CI/CD pipelines for automated deployment
 - Using IAM roles instead of hardcoded credentials
